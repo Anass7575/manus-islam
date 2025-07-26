@@ -1,53 +1,51 @@
-// Service pour l'API du Coran avec proxy CORS
-const QURAN_API_BASE = 'https://api.alquran.cloud/v1'
-const CORS_PROXY = 'https://corsproxy.io/?'
+// Service pour l'API du Coran avec support multilingue
+const API_BASE_URL = 'https://api.alquran.cloud/v1'
 
-// Cache pour éviter les appels répétés
+// Cache pour éviter les requêtes répétées
 const cache = new Map()
 
-// Fonction utilitaire pour faire des requêtes avec gestion CORS
-async function fetchWithCors(url) {
+// Fonction utilitaire pour les requêtes avec gestion CORS
+const fetchWithCors = async (url) => {
   try {
-    // Essayer d'abord sans proxy
-    const response = await fetch(url)
-    if (response.ok) {
-      return response
-    }
-    throw new Error('CORS error')
-  } catch (error) {
-    // Si erreur CORS, utiliser le proxy
-    const proxiedUrl = CORS_PROXY + encodeURIComponent(url)
-    return fetch(proxiedUrl)
-  }
-}
-
-// Fonction utilitaire pour les appels API avec cache
-async function fetchWithCache(url, cacheKey) {
-  if (cache.has(cacheKey)) {
-    return cache.get(cacheKey)
-  }
-  
-  try {
-    const response = await fetchWithCors(url)
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      mode: 'cors'
+    })
+    
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
     }
-    const data = await response.json()
-    cache.set(cacheKey, data)
-    return data
+    
+    return await response.json()
   } catch (error) {
-    console.error('Erreur lors de l\'appel API:', error)
+    console.error('Erreur de requête:', error)
     throw error
   }
 }
 
-// Récupérer toutes les sourates avec métadonnées
-export async function getAllSurahs() {
-  const cacheKey = 'all_surahs'
-  const data = await fetchWithCache(`${QURAN_API_BASE}/meta`, cacheKey)
+// Obtenir toutes les sourates avec traduction dans une langue spécifique
+export const getAllSurahs = async (edition = 'fr.hamidullah') => {
+  const cacheKey = `surahs_${edition}`
   
-  if (data.code === 200) {
-    return data.data.surahs.references.map(surah => ({
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey)
+  }
+
+  try {
+    console.log(`📖 Chargement des sourates avec l'édition: ${edition}`)
+    
+    // Obtenir la liste des sourates avec métadonnées
+    const metaResponse = await fetchWithCors(`${API_BASE_URL}/meta`)
+    
+    if (!metaResponse.data || !metaResponse.data.surahs) {
+      throw new Error('Données de métadonnées invalides')
+    }
+
+    const surahs = metaResponse.data.surahs.references.map(surah => ({
       number: surah.number,
       name: surah.name,
       englishName: surah.englishName,
@@ -55,127 +53,191 @@ export async function getAllSurahs() {
       numberOfAyahs: surah.numberOfAyahs,
       revelationType: surah.revelationType
     }))
+
+    console.log(`✅ ${surahs.length} sourates chargées pour l'édition ${edition}`)
+    
+    cache.set(cacheKey, surahs)
+    return surahs
+  } catch (error) {
+    console.error('Erreur lors du chargement des sourates:', error)
+    throw new Error('Impossible de charger les sourates')
   }
-  
-  throw new Error('Erreur lors de la récupération des sourates')
 }
 
-// Récupérer une sourate spécifique avec ses versets
-export async function getSurah(surahNumber, edition = 'quran-uthmani') {
+// Obtenir une sourate spécifique avec traduction
+export const getSurah = async (surahNumber, edition = 'fr.hamidullah') => {
   const cacheKey = `surah_${surahNumber}_${edition}`
-  const data = await fetchWithCache(`${QURAN_API_BASE}/surah/${surahNumber}/${edition}`, cacheKey)
   
-  if (data.code === 200) {
-    return {
-      number: data.data.number,
-      name: data.data.name,
-      englishName: data.data.englishName,
-      englishNameTranslation: data.data.englishNameTranslation,
-      numberOfAyahs: data.data.numberOfAyahs,
-      revelationType: data.data.revelationType,
-      ayahs: data.data.ayahs.map(ayah => ({
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey)
+  }
+
+  try {
+    console.log(`📖 Chargement de la sourate ${surahNumber} avec l'édition: ${edition}`)
+    
+    // Obtenir la sourate avec traduction
+    const response = await fetchWithCors(`${API_BASE_URL}/surah/${surahNumber}/${edition}`)
+    
+    if (!response.data) {
+      throw new Error('Données de sourate invalides')
+    }
+
+    const surah = {
+      number: response.data.number,
+      name: response.data.name,
+      englishName: response.data.englishName,
+      englishNameTranslation: response.data.englishNameTranslation,
+      numberOfAyahs: response.data.numberOfAyahs,
+      revelationType: response.data.revelationType,
+      ayahs: response.data.ayahs.map(ayah => ({
         number: ayah.number,
         numberInSurah: ayah.numberInSurah,
         text: ayah.text,
         juz: ayah.juz,
+        manzil: ayah.manzil,
         page: ayah.page,
+        ruku: ayah.ruku,
+        hizbQuarter: ayah.hizbQuarter,
         sajda: ayah.sajda
       }))
     }
+
+    console.log(`✅ Sourate ${surahNumber} chargée avec ${surah.ayahs.length} versets`)
+    
+    cache.set(cacheKey, surah)
+    return surah
+  } catch (error) {
+    console.error(`Erreur lors du chargement de la sourate ${surahNumber}:`, error)
+    throw new Error(`Impossible de charger la sourate ${surahNumber}`)
   }
-  
-  throw new Error('Erreur lors de la récupération de la sourate')
 }
 
-// Récupérer une sourate avec traduction
-export async function getSurahWithTranslation(surahNumber, translationEdition = 'fr.hamidullah') {
+// Obtenir une sourate avec texte arabe ET traduction
+export const getSurahWithTranslation = async (surahNumber, translationEdition = 'fr.hamidullah') => {
+  const cacheKey = `surah_bilingual_${surahNumber}_${translationEdition}`
+  
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey)
+  }
+
   try {
-    // Récupérer le texte arabe
-    const arabicSurah = await getSurah(surahNumber, 'quran-uthmani')
+    console.log(`📖 Chargement bilingue de la sourate ${surahNumber}`)
     
-    // Récupérer la traduction
-    const translationData = await fetchWithCache(
-      `${QURAN_API_BASE}/surah/${surahNumber}/${translationEdition}`,
-      `surah_${surahNumber}_${translationEdition}`
-    )
-    
-    if (translationData.code === 200) {
-      // Combiner le texte arabe et la traduction
-      const combinedAyahs = arabicSurah.ayahs.map((ayah, index) => ({
-        ...ayah,
-        translation: translationData.data.ayahs[index]?.text || ''
-      }))
-      
-      return {
-        ...arabicSurah,
-        ayahs: combinedAyahs
-      }
+    // Obtenir le texte arabe et la traduction en parallèle
+    const [arabicResponse, translationResponse] = await Promise.all([
+      fetchWithCors(`${API_BASE_URL}/surah/${surahNumber}/ar.alafasy`),
+      fetchWithCors(`${API_BASE_URL}/surah/${surahNumber}/${translationEdition}`)
+    ])
+
+    if (!arabicResponse.data || !translationResponse.data) {
+      throw new Error('Données de sourate invalides')
     }
+
+    const surah = {
+      number: arabicResponse.data.number,
+      name: arabicResponse.data.name,
+      englishName: arabicResponse.data.englishName,
+      englishNameTranslation: arabicResponse.data.englishNameTranslation,
+      numberOfAyahs: arabicResponse.data.numberOfAyahs,
+      revelationType: arabicResponse.data.revelationType,
+      ayahs: arabicResponse.data.ayahs.map((arabicAyah, index) => {
+        const translationAyah = translationResponse.data.ayahs[index]
+        return {
+          number: arabicAyah.number,
+          numberInSurah: arabicAyah.numberInSurah,
+          arabicText: arabicAyah.text,
+          translationText: translationAyah ? translationAyah.text : '',
+          juz: arabicAyah.juz,
+          manzil: arabicAyah.manzil,
+          page: arabicAyah.page,
+          ruku: arabicAyah.ruku,
+          hizbQuarter: arabicAyah.hizbQuarter,
+          sajda: arabicAyah.sajda
+        }
+      })
+    }
+
+    console.log(`✅ Sourate bilingue ${surahNumber} chargée avec ${surah.ayahs.length} versets`)
     
-    // Si la traduction échoue, retourner seulement le texte arabe
-    return arabicSurah
+    cache.set(cacheKey, surah)
+    return surah
   } catch (error) {
-    console.error('Erreur lors de la récupération avec traduction:', error)
-    // Fallback: retourner seulement le texte arabe
-    return await getSurah(surahNumber)
+    console.error(`Erreur lors du chargement bilingue de la sourate ${surahNumber}:`, error)
+    throw new Error(`Impossible de charger la sourate ${surahNumber}`)
   }
 }
 
 // Rechercher dans le Coran
-export async function searchQuran(query, edition = 'quran-uthmani') {
-  if (!query || query.trim().length < 2) {
-    return []
-  }
-  
-  const cacheKey = `search_${query}_${edition}`
-  const data = await fetchWithCache(
-    `${QURAN_API_BASE}/search/${encodeURIComponent(query)}/${edition}`,
-    cacheKey
-  )
-  
-  if (data.code === 200) {
-    return data.data.matches.map(match => ({
-      surah: match.surah,
-      ayah: match.numberInSurah,
-      text: match.text
+export const searchQuran = async (query, edition = 'fr.hamidullah', limit = 20) => {
+  try {
+    console.log(`🔍 Recherche dans le Coran: "${query}" (${edition})`)
+    
+    const response = await fetchWithCors(`${API_BASE_URL}/search/${encodeURIComponent(query)}/${edition}`)
+    
+    if (!response.data || !response.data.matches) {
+      return []
+    }
+
+    const results = response.data.matches.slice(0, limit).map(match => ({
+      surah: {
+        number: match.surah.number,
+        name: match.surah.name,
+        englishName: match.surah.englishName
+      },
+      ayah: {
+        number: match.numberInSurah,
+        text: match.text
+      }
     }))
+
+    console.log(`✅ ${results.length} résultats trouvés pour "${query}"`)
+    return results
+  } catch (error) {
+    console.error('Erreur lors de la recherche:', error)
+    throw new Error('Impossible d\'effectuer la recherche')
   }
-  
-  return []
 }
 
-// Récupérer les éditions disponibles pour une langue
-export async function getEditionsForLanguage(languageCode) {
-  const cacheKey = `editions_${languageCode}`
-  const data = await fetchWithCache(`${QURAN_API_BASE}/edition/language/${languageCode}`, cacheKey)
+// Obtenir les éditions disponibles
+export const getAvailableEditions = async () => {
+  const cacheKey = 'editions'
   
-  if (data.code === 200) {
-    return data.data.filter(edition => edition.format === 'text').map(edition => ({
-      identifier: edition.identifier,
-      language: edition.language,
-      name: edition.name,
-      englishName: edition.englishName,
-      type: edition.type
-    }))
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey)
   }
-  
-  return []
+
+  try {
+    console.log('📚 Chargement des éditions disponibles')
+    
+    const response = await fetchWithCors(`${API_BASE_URL}/edition`)
+    
+    if (!response.data) {
+      throw new Error('Données d\'éditions invalides')
+    }
+
+    const editions = response.data
+      .filter(edition => edition.type === 'translation')
+      .map(edition => ({
+        identifier: edition.identifier,
+        language: edition.language,
+        name: edition.name,
+        englishName: edition.englishName,
+        type: edition.type
+      }))
+
+    console.log(`✅ ${editions.length} éditions chargées`)
+    
+    cache.set(cacheKey, editions)
+    return editions
+  } catch (error) {
+    console.error('Erreur lors du chargement des éditions:', error)
+    throw new Error('Impossible de charger les éditions')
+  }
 }
 
-// Mapping des langues vers les éditions de traduction
-export const TRANSLATION_EDITIONS = {
-  'fr': 'fr.hamidullah',
-  'en': 'en.sahih',
-  'es': 'es.cortes',
-  'ar': 'quran-uthmani',
-  'hi': 'hi.hindi',
-  'ru': 'ru.kuliev',
-  'pt': 'pt.elhayek',
-  'ur': 'ur.jalandhry'
-}
-
-// Récupérer l'édition de traduction pour une langue
-export function getTranslationEdition(languageCode) {
-  return TRANSLATION_EDITIONS[languageCode] || 'en.sahih'
+// Nettoyer le cache
+export const clearCache = () => {
+  cache.clear()
+  console.log('🧹 Cache du service Coran nettoyé')
 }
 

@@ -1,248 +1,228 @@
-import { useState } from 'react'
-import { BrowserRouter as Router, Routes, Route, Link, useNavigate } from 'react-router-dom'
+import React, { useState } from 'react'
+import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom'
 import { Button } from '@/components/ui/button.jsx'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card.jsx'
 import { Input } from '@/components/ui/input.jsx'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select.jsx'
-import { BookOpen, Search, Globe, Moon, Sun, Menu } from 'lucide-react'
+import { Search, BookOpen, Scroll, Globe } from 'lucide-react'
 import QuranPage from './components/QuranPage.jsx'
 import HadithPage from './components/HadithPage.jsx'
+import { LanguageProvider, useLanguage } from './contexts/LanguageContext.jsx'
 import './App.css'
 
-// Composant Header
-function Header() {
-  const [isDark, setIsDark] = useState(false)
-  const [language, setLanguage] = useState('fr')
-
-  const languages = [
-    { code: 'ar', name: 'العربية', dir: 'rtl' },
-    { code: 'en', name: 'English', dir: 'ltr' },
-    { code: 'fr', name: 'Français', dir: 'ltr' },
-    { code: 'es', name: 'Español', dir: 'ltr' },
-    { code: 'hi', name: 'हिन्दी', dir: 'ltr' },
-    { code: 'zh', name: '中文', dir: 'ltr' },
-    { code: 'ru', name: 'Русский', dir: 'ltr' },
-    { code: 'bn', name: 'বাংলা', dir: 'ltr' },
-    { code: 'pt', name: 'Português', dir: 'ltr' },
-    { code: 'ur', name: 'اردو', dir: 'rtl' }
-  ]
+// Composant pour le sélecteur de langue
+function LanguageSelector() {
+  const { currentLanguage, changeLanguage, getSupportedLanguages, isLoading } = useLanguage()
+  const languages = getSupportedLanguages()
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-        {/* Logo et titre */}
-        <Link to="/" className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
-          <div className="w-8 h-8 bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-lg flex items-center justify-center">
-            <BookOpen className="w-5 h-5 text-white" />
+    <Select value={currentLanguage} onValueChange={changeLanguage} disabled={isLoading}>
+      <SelectTrigger className="w-32">
+        <SelectValue>
+          <div className="flex items-center space-x-2">
+            <Globe className="w-4 h-4" />
+            <span>{languages.find(l => l.code === currentLanguage)?.name}</span>
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-emerald-800">Islam Web</h1>
-            <p className="text-xs text-muted-foreground">Coran et Sahih al-Bukhari</p>
-          </div>
-        </Link>
-
-        {/* Navigation centrale */}
-        <nav className="hidden md:flex items-center space-x-6">
-          <Link to="/">
-            <Button variant="ghost" className="text-emerald-700 hover:text-emerald-800">
-              Accueil
-            </Button>
-          </Link>
-          <Link to="/quran">
-            <Button variant="ghost" className="text-emerald-700 hover:text-emerald-800">
-              Coran
-            </Button>
-          </Link>
-          <Link to="/hadith">
-            <Button variant="ghost" className="text-emerald-700 hover:text-emerald-800">
-              Sahih al-Bukhari
-            </Button>
-          </Link>
-        </nav>
-
-        {/* Actions à droite */}
-        <div className="flex items-center space-x-3">
-          {/* Sélecteur de langue */}
-          <Select value={language} onValueChange={setLanguage}>
-            <SelectTrigger className="w-32">
-              <Globe className="w-4 h-4 mr-2" />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {languages.map((lang) => (
-                <SelectItem key={lang.code} value={lang.code}>
-                  {lang.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {/* Toggle mode sombre */}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setIsDark(!isDark)}
-            className="text-emerald-700 hover:text-emerald-800"
-          >
-            {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-          </Button>
-
-          {/* Menu mobile */}
-          <Button variant="ghost" size="icon" className="md:hidden">
-            <Menu className="w-5 h-5" />
-          </Button>
-        </div>
-      </div>
-    </header>
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {languages.map((language) => (
+          <SelectItem key={language.code} value={language.code}>
+            <div className="flex items-center space-x-2">
+              <span>{language.flag}</span>
+              <span>{language.name}</span>
+            </div>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   )
 }
 
-// Composant Page d'accueil
-function HomePage() {
-  const [searchQuery, setSearchQuery] = useState('')
-  const navigate = useNavigate()
+// Composant de navigation
+function Navigation() {
+  const location = useLocation()
+  
+  const isActive = (path) => {
+    if (path === '/' && location.pathname === '/') return true
+    if (path !== '/' && location.pathname.startsWith(path)) return true
+    return false
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-blue-50">
-      {/* Section héro */}
-      <section className="py-20 px-4">
-        <div className="container mx-auto text-center">
-          <h1 className="text-4xl md:text-6xl font-bold text-emerald-800 mb-6">
+    <nav className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between items-center h-16">
+          {/* Logo */}
+          <Link to="/" className="flex items-center space-x-3">
+            <div className="w-10 h-10 bg-emerald-600 text-white rounded-lg flex items-center justify-center font-bold text-lg">
+              إ
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">Islam Web</h1>
+              <p className="text-sm text-gray-600">Coran et Sahih al-Bukhari</p>
+            </div>
+          </Link>
+
+          {/* Navigation principale */}
+          <div className="hidden md:flex items-center space-x-8">
+            <Link to="/" className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              isActive('/') ? 'bg-orange-100 text-orange-700' : 'text-gray-700 hover:text-orange-600'
+            }`}>
+              Accueil
+            </Link>
+            <Link to="/quran" className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              isActive('/quran') ? 'bg-teal-100 text-teal-700' : 'text-gray-700 hover:text-teal-600'
+            }`}>
+              Coran
+            </Link>
+            <Link to="/hadith" className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              isActive('/hadith') ? 'bg-purple-100 text-purple-700' : 'text-gray-700 hover:text-purple-600'
+            }`}>
+              Sahih al-Bukhari
+            </Link>
+          </div>
+
+          {/* Sélecteur de langue */}
+          <div className="flex items-center space-x-4">
+            <LanguageSelector />
+          </div>
+
+          {/* Navigation mobile */}
+          <div className="md:hidden flex items-center space-x-2">
+            <LanguageSelector />
+          </div>
+        </div>
+
+        {/* Navigation mobile étendue */}
+        <div className="md:hidden pb-3 space-x-1">
+          <Link to="/" className={`block px-3 py-2 rounded-md text-base font-medium ${
+            isActive('/') ? 'bg-orange-100 text-orange-700' : 'text-gray-700'
+          }`}>
+            Accueil
+          </Link>
+          <Link to="/quran" className={`block px-3 py-2 rounded-md text-base font-medium ${
+            isActive('/quran') ? 'bg-teal-100 text-teal-700' : 'text-gray-700'
+          }`}>
+            Coran
+          </Link>
+          <Link to="/hadith" className={`block px-3 py-2 rounded-md text-base font-medium ${
+            isActive('/hadith') ? 'bg-purple-100 text-purple-700' : 'text-gray-700'
+          }`}>
+            Sahih al-Bukhari
+          </Link>
+        </div>
+      </div>
+    </nav>
+  )
+}
+
+// Page d'accueil
+function HomePage() {
+  const { getCurrentLanguageInfo, isRTL } = useLanguage()
+  const currentLang = getCurrentLanguageInfo()
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-blue-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        {/* En-tête principal */}
+        <div className="text-center mb-16">
+          <div className={`text-6xl font-bold text-emerald-800 mb-6 ${isRTL() ? 'font-arabic' : ''}`} 
+               dir={isRTL() ? 'rtl' : 'ltr'}>
             بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
-          </h1>
-          <p className="text-xl md:text-2xl text-emerald-700 mb-8">
+          </div>
+          <h2 className="text-2xl text-gray-700 mb-8">
             Au nom d'Allah, le Tout Miséricordieux, le Très Miséricordieux
-          </p>
-          <p className="text-lg text-gray-600 mb-12 max-w-3xl mx-auto">
-            Découvrez le Saint Coran et les enseignements du Prophète Muhammad (ﷺ) 
-            à travers Sahih al-Bukhari, disponibles dans les langues les plus parlées du monde.
-          </p>
-
-          {/* Barre de recherche */}
-          <div className="max-w-2xl mx-auto mb-12">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <Input
-                type="text"
-                placeholder="Rechercher dans le Coran ou les hadiths..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 pr-4 py-3 text-lg border-2 border-emerald-200 focus:border-emerald-500 rounded-xl"
-              />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Section des cartes principales */}
-      <section className="py-16 px-4">
-        <div className="container mx-auto">
-          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-            {/* Carte Coran */}
-            <Card className="group hover:shadow-xl transition-all duration-300 border-2 border-emerald-100 hover:border-emerald-300">
-              <CardHeader className="text-center pb-4">
-                <div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
-                  <BookOpen className="w-8 h-8 text-white" />
-                </div>
-                <CardTitle className="text-2xl text-emerald-800">القرآن الكريم</CardTitle>
-                <CardDescription className="text-lg">Le Saint Coran</CardDescription>
-              </CardHeader>
-              <CardContent className="text-center">
-                <p className="text-gray-600 mb-6">
-                  Lisez le Coran complet avec ses 114 sourates, disponible en arabe 
-                  et traduit dans de nombreuses langues.
-                </p>
-                <Button 
-                  onClick={() => navigate('/quran')}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-3 rounded-xl"
-                >
-                  Commencer la lecture
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Carte Sahih al-Bukhari */}
-            <Card className="group hover:shadow-xl transition-all duration-300 border-2 border-blue-100 hover:border-blue-300">
-              <CardHeader className="text-center pb-4">
-                <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-700 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
-                  <BookOpen className="w-8 h-8 text-white" />
-                </div>
-                <CardTitle className="text-2xl text-blue-800">صحيح البخاري</CardTitle>
-                <CardDescription className="text-lg">Sahih al-Bukhari</CardDescription>
-              </CardHeader>
-              <CardContent className="text-center">
-                <p className="text-gray-600 mb-6">
-                  Explorez la collection complète des hadiths authentiques 
-                  compilés par l'Imam al-Bukhari.
-                </p>
-                <Button 
-                  onClick={() => navigate('/hadith')}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl"
-                >
-                  Explorer les hadiths
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </section>
-
-      {/* Section des fonctionnalités */}
-      <section className="py-16 px-4 bg-white/50">
-        <div className="container mx-auto">
-          <h2 className="text-3xl font-bold text-center text-gray-800 mb-12">
-            Fonctionnalités
           </h2>
-          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            <div className="text-center">
-              <div className="w-12 h-12 bg-emerald-100 rounded-lg flex items-center justify-center mx-auto mb-4">
-                <Globe className="w-6 h-6 text-emerald-600" />
+          <p className="text-lg text-gray-600 max-w-3xl mx-auto leading-relaxed">
+            Découvrez le Saint Coran et les enseignements du Prophète Muhammad (ﷺ) à 
+            travers Sahih al-Bukhari, disponibles dans les langues les plus parlées du monde.
+          </p>
+        </div>
+
+        {/* Barre de recherche */}
+        <div className="max-w-2xl mx-auto mb-16">
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <Input 
+              placeholder="Rechercher dans le Coran ou les hadiths..."
+              className="pl-12 pr-4 py-4 text-lg border-2 border-gray-200 rounded-xl focus:border-emerald-500 focus:ring-emerald-500"
+            />
+          </div>
+        </div>
+
+        {/* Cartes principales */}
+        <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+          {/* Carte Coran */}
+          <div className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300">
+            <div className="p-8">
+              <div className="w-16 h-16 bg-teal-600 text-white rounded-full flex items-center justify-center mb-6 mx-auto">
+                <BookOpen className="w-8 h-8" />
               </div>
-              <h3 className="text-xl font-semibold mb-3">Multilingue</h3>
-              <p className="text-gray-600">
-                Disponible dans les 10 langues les plus parlées au monde
+              <h3 className="text-2xl font-bold text-teal-800 text-center mb-4">القرآن الكريم</h3>
+              <p className="text-lg text-gray-600 text-center mb-2">Le Saint Coran</p>
+              <p className="text-gray-600 text-center mb-8 leading-relaxed">
+                Lisez le Coran complet avec ses 114 sourates, 
+                disponible en arabe et traduit dans de nombreuses langues.
               </p>
+              <div className="border-t border-gray-100 pt-6">
+                <Link to="/quran">
+                  <Button className="w-full bg-teal-600 hover:bg-teal-700 text-white py-3 text-lg rounded-xl">
+                    Commencer la lecture
+                  </Button>
+                </Link>
+              </div>
             </div>
-            <div className="text-center">
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-4">
-                <Search className="w-6 h-6 text-blue-600" />
+          </div>
+
+          {/* Carte Sahih al-Bukhari */}
+          <div className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300">
+            <div className="p-8">
+              <div className="w-16 h-16 bg-blue-600 text-white rounded-full flex items-center justify-center mb-6 mx-auto">
+                <Scroll className="w-8 h-8" />
               </div>
-              <h3 className="text-xl font-semibold mb-3">Recherche avancée</h3>
-              <p className="text-gray-600">
-                Recherchez facilement dans le Coran et les hadiths
+              <h3 className="text-2xl font-bold text-blue-800 text-center mb-4">صحيح البخاري</h3>
+              <p className="text-lg text-gray-600 text-center mb-2">Sahih al-Bukhari</p>
+              <p className="text-gray-600 text-center mb-8 leading-relaxed">
+                Explorez la collection complète des hadiths 
+                authentiques compilés par l'Imam al-Bukhari.
               </p>
-            </div>
-            <div className="text-center">
-              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mx-auto mb-4">
-                <BookOpen className="w-6 h-6 text-purple-600" />
+              <div className="border-t border-gray-100 pt-6">
+                <Link to="/hadith">
+                  <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 text-lg rounded-xl">
+                    Explorer les hadiths
+                  </Button>
+                </Link>
               </div>
-              <h3 className="text-xl font-semibold mb-3">Navigation intuitive</h3>
-              <p className="text-gray-600">
-                Interface moderne et facile à utiliser
-              </p>
             </div>
           </div>
         </div>
-      </section>
+      </div>
     </div>
   )
 }
 
-// Composant principal App
-function App() {
+// Composant principal de l'App avec le contexte
+function AppContent() {
   return (
     <Router>
-      <div className="min-h-screen bg-background">
-        <Header />
-        <main>
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/quran" element={<QuranPage />} />
-            <Route path="/hadith" element={<HadithPage />} />
-          </Routes>
-        </main>
+      <div className="min-h-screen bg-gray-50">
+        <Navigation />
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/quran" element={<QuranPage />} />
+          <Route path="/hadith" element={<HadithPage />} />
+        </Routes>
       </div>
     </Router>
+  )
+}
+
+// App principale avec le provider
+function App() {
+  return (
+    <LanguageProvider>
+      <AppContent />
+    </LanguageProvider>
   )
 }
 
