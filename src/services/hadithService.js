@@ -1,43 +1,29 @@
 // Service pour les hadiths Sahih al-Bukhari
-// Utilise TOUS les hadiths du fichier bukhari.json complet
+// Utilise un système de chargement à la demande par chapitre pour optimiser les performances
 
 // Cache pour les données
-let bukhariData = null
+let chaptersIndex = null
 const hadithCache = new Map()
 const chapterCache = new Map()
 
-// Charger les données Bukhari depuis le fichier JSON
-async function loadBukhariData() {
-  if (bukhariData) {
-    return bukhariData
+// Charger l'index des chapitres
+async function loadChaptersIndex() {
+  if (chaptersIndex) {
+    return chaptersIndex
   }
   
   try {
-    console.log('Chargement de la base de données complète Sahih al-Bukhari...')
-    const response = await fetch('/bukhari.json')
+    console.log('📚 Chargement de l\'index des chapitres Sahih al-Bukhari...')
+    const response = await fetch('/hadiths/index.json')
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
     }
     
-    const jsonData = await response.json()
-    
-    // Vérifier la structure des données
-    if (jsonData.hadiths && Array.isArray(jsonData.hadiths)) {
-      bukhariData = jsonData.hadiths
-      console.log('✅ Données Bukhari chargées:', bukhariData.length, 'hadiths au total')
-      console.log('📊 Métadonnées:', jsonData.metadata || 'Non disponibles')
-      return bukhariData
-    } else if (Array.isArray(jsonData)) {
-      // Fallback si c'est directement un tableau
-      bukhariData = jsonData
-      console.log('✅ Données Bukhari chargées (format tableau):', bukhariData.length, 'hadiths au total')
-      return bukhariData
-    } else {
-      console.error('Structure de données inattendue:', Object.keys(jsonData))
-      throw new Error('Format de données invalide - structure inattendue')
-    }
+    chaptersIndex = await response.json()
+    console.log('✅ Index des chapitres chargé:', chaptersIndex.length, 'chapitres disponibles')
+    return chaptersIndex
   } catch (error) {
-    console.error('❌ Erreur lors du chargement des données Bukhari:', error)
+    console.error('❌ Erreur lors du chargement de l\'index des chapitres:', error)
     throw error
   }
 }
@@ -51,32 +37,18 @@ export async function getAllChapters() {
   }
   
   try {
-    const data = await loadBukhariData()
+    const index = await loadChaptersIndex()
     
-    // Grouper les hadiths par chapitre
-    const chapterMap = new Map()
+    // Transformer l'index en format de chapitres avec métadonnées
+    const chapters = index.map(chapter => ({
+      id: chapter.id,
+      title: getChapterTitle(chapter.id),
+      arabicTitle: getChapterArabicTitle(chapter.id),
+      hadithCount: chapter.hadithCount,
+      filename: chapter.filename
+    }))
     
-    data.forEach(hadith => {
-      const chapterId = hadith.chapterId
-      if (!chapterMap.has(chapterId)) {
-        chapterMap.set(chapterId, {
-          id: chapterId,
-          title: getChapterTitle(chapterId),
-          arabicTitle: getChapterArabicTitle(chapterId),
-          hadithCount: 0,
-          hadiths: []
-        })
-      }
-      
-      const chapter = chapterMap.get(chapterId)
-      chapter.hadithCount++
-      chapter.hadiths.push(hadith)
-    })
-    
-    // Convertir en tableau et trier par ID
-    const chapters = Array.from(chapterMap.values()).sort((a, b) => a.id - b.id)
-    
-    console.log(`📚 ${chapters.length} chapitres trouvés avec un total de ${data.length} hadiths`)
+    console.log(`📖 ${chapters.length} chapitres disponibles`)
     
     chapterCache.set(cacheKey, chapters)
     return chapters
@@ -93,7 +65,7 @@ export async function getChapter(chapterId) {
   return chapters.find(chapter => chapter.id === chapterId)
 }
 
-// Récupérer les hadiths d'un chapitre
+// Récupérer les hadiths d'un chapitre (chargement à la demande)
 export async function getChapterHadiths(chapterId) {
   const cacheKey = `chapter_${chapterId}`
   
@@ -104,25 +76,29 @@ export async function getChapterHadiths(chapterId) {
   
   try {
     console.log(`🔍 Chargement des hadiths du chapitre ${chapterId}...`)
-    const data = await loadBukhariData()
     
-    // Filtrer les hadiths par chapitre
-    const chapterHadiths = data.filter(hadith => hadith.chapterId === chapterId)
+    // Charger le fichier spécifique du chapitre
+    const response = await fetch(`/hadiths/chapter_${chapterId}.json`)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    
+    const chapterHadiths = await response.json()
     
     // Trier par ID dans le livre
-    chapterHadiths.sort((a, b) => a.idInBook - b.idInBook)
+    chapterHadiths.sort((a, b) => (a.idInBook || a.id) - (b.idInBook || b.id))
     
-    console.log(`✅ ${chapterHadiths.length} hadiths trouvés pour le chapitre ${chapterId}`)
+    console.log(`✅ ${chapterHadiths.length} hadiths chargés pour le chapitre ${chapterId}`)
     
     hadithCache.set(cacheKey, chapterHadiths)
     return chapterHadiths
   } catch (error) {
-    console.error('Erreur lors du chargement des hadiths du chapitre:', error)
+    console.error(`Erreur lors du chargement des hadiths du chapitre ${chapterId}:`, error)
     throw error
   }
 }
 
-// Rechercher dans les hadiths
+// Rechercher dans les hadiths (recherche dans l'index puis chargement à la demande)
 export async function searchHadiths(query) {
   if (!query || query.trim().length < 2) {
     return []
@@ -130,31 +106,45 @@ export async function searchHadiths(query) {
   
   try {
     console.log(`🔍 Recherche: "${query}"`)
-    const data = await loadBukhariData()
     const searchTerm = query.toLowerCase()
     const results = []
     
-    data.forEach(hadith => {
-      const arabicMatch = hadith.arabic && hadith.arabic.includes(query)
-      const englishMatch = hadith.english && hadith.english.text && 
-                          hadith.english.text.toLowerCase().includes(searchTerm)
-      const narratorMatch = hadith.english && hadith.english.narrator && 
-                           hadith.english.narrator.toLowerCase().includes(searchTerm)
-      
-      if (arabicMatch || englishMatch || narratorMatch) {
-        results.push({
-          ...hadith,
-          chapter: {
-            id: hadith.chapterId,
-            title: getChapterTitle(hadith.chapterId),
-            arabicTitle: getChapterArabicTitle(hadith.chapterId)
+    // Obtenir la liste des chapitres
+    const chapters = await getAllChapters()
+    
+    // Rechercher dans les chapitres qui correspondent au terme de recherche
+    for (const chapter of chapters.slice(0, 10)) { // Limiter à 10 chapitres pour la performance
+      try {
+        const hadiths = await getChapterHadiths(chapter.id)
+        
+        hadiths.forEach(hadith => {
+          const arabicMatch = hadith.arabic && hadith.arabic.includes(query)
+          const englishMatch = hadith.english && hadith.english.text && 
+                              hadith.english.text.toLowerCase().includes(searchTerm)
+          const narratorMatch = hadith.english && hadith.english.narrator && 
+                               hadith.english.narrator.toLowerCase().includes(searchTerm)
+          
+          if (arabicMatch || englishMatch || narratorMatch) {
+            results.push({
+              ...hadith,
+              chapter: {
+                id: chapter.id,
+                title: chapter.title,
+                arabicTitle: chapter.arabicTitle
+              }
+            })
           }
         })
+        
+        // Limiter les résultats pour éviter une surcharge
+        if (results.length >= 50) break
+      } catch (error) {
+        console.warn(`Erreur lors de la recherche dans le chapitre ${chapter.id}:`, error)
       }
-    })
+    }
     
     console.log(`📋 ${results.length} résultats trouvés pour "${query}"`)
-    return results.slice(0, 100) // Limiter à 100 résultats pour la performance
+    return results
   } catch (error) {
     console.error('Erreur lors de la recherche:', error)
     return []
@@ -162,16 +152,27 @@ export async function searchHadiths(query) {
 }
 
 // Récupérer un hadith spécifique
-export async function getHadith(hadithId) {
+export async function getHadith(hadithId, chapterId) {
   try {
-    const data = await loadBukhariData()
-    const hadith = data.find(h => h.id === hadithId)
-    
-    if (!hadith) {
-      throw new Error('Hadith non trouvé')
+    if (chapterId) {
+      const hadiths = await getChapterHadiths(chapterId)
+      const hadith = hadiths.find(h => h.id === hadithId)
+      if (hadith) return hadith
     }
     
-    return hadith
+    // Si pas trouvé, chercher dans tous les chapitres (moins efficace)
+    const chapters = await getAllChapters()
+    for (const chapter of chapters) {
+      try {
+        const hadiths = await getChapterHadiths(chapter.id)
+        const hadith = hadiths.find(h => h.id === hadithId)
+        if (hadith) return hadith
+      } catch (error) {
+        continue
+      }
+    }
+    
+    throw new Error('Hadith non trouvé')
   } catch (error) {
     console.error('Erreur lors de la récupération du hadith:', error)
     throw error
@@ -181,11 +182,34 @@ export async function getHadith(hadithId) {
 // Récupérer des hadiths aléatoires
 export async function getRandomHadiths(count = 5) {
   try {
-    const data = await loadBukhariData()
+    const chapters = await getAllChapters()
+    const results = []
     
-    // Mélanger et prendre les premiers
-    const shuffled = [...data].sort(() => 0.5 - Math.random())
-    return shuffled.slice(0, count)
+    // Sélectionner des chapitres aléatoires
+    const randomChapters = chapters.sort(() => 0.5 - Math.random()).slice(0, Math.min(5, chapters.length))
+    
+    for (const chapter of randomChapters) {
+      try {
+        const hadiths = await getChapterHadiths(chapter.id)
+        if (hadiths.length > 0) {
+          const randomHadith = hadiths[Math.floor(Math.random() * hadiths.length)]
+          results.push({
+            ...randomHadith,
+            chapter: {
+              id: chapter.id,
+              title: chapter.title,
+              arabicTitle: chapter.arabicTitle
+            }
+          })
+        }
+        
+        if (results.length >= count) break
+      } catch (error) {
+        continue
+      }
+    }
+    
+    return results.slice(0, count)
   } catch (error) {
     console.error('Erreur lors de la récupération des hadiths aléatoires:', error)
     return []
@@ -195,12 +219,12 @@ export async function getRandomHadiths(count = 5) {
 // Statistiques
 export async function getStatistics() {
   try {
-    const data = await loadBukhariData()
     const chapters = await getAllChapters()
+    const totalHadiths = chapters.reduce((sum, chapter) => sum + chapter.hadithCount, 0)
     
     return {
       totalChapters: chapters.length,
-      totalHadiths: data.length,
+      totalHadiths: totalHadiths,
       availableChapters: chapters.length
     }
   } catch (error) {
@@ -210,6 +234,28 @@ export async function getStatistics() {
       totalHadiths: 0,
       availableChapters: 0
     }
+  }
+}
+
+// Précharger les chapitres les plus importants
+export async function preloadImportantChapters() {
+  const importantChapters = [1, 2, 3, 8, 23] // Révélation, Foi, Connaissance, Prière, Jeûne
+  
+  try {
+    console.log('🚀 Préchargement des chapitres importants...')
+    const promises = importantChapters.map(chapterId => 
+      getChapterHadiths(chapterId).catch(error => {
+        console.warn(`Échec du préchargement du chapitre ${chapterId}:`, error)
+        return null
+      })
+    )
+    
+    await Promise.all(promises)
+    console.log('✅ Chapitres importants préchargés')
+    return true
+  } catch (error) {
+    console.error('❌ Erreur lors du préchargement:', error)
+    return false
   }
 }
 
@@ -349,7 +395,74 @@ function getChapterArabicTitle(chapterId) {
     27: "العمرة",
     28: "المحصر",
     29: "جزاء الصيد",
-    30: "فضائل المدينة"
+    30: "فضائل المدينة",
+    31: "الجهاد",
+    32: "الخمس",
+    33: "الجزية",
+    34: "البيوع",
+    35: "السلم",
+    36: "الإجارة",
+    37: "الخصومات",
+    38: "اللقطة",
+    39: "المساقاة",
+    40: "الاستقراض",
+    41: "الوكالة",
+    42: "الشركة",
+    43: "الرهن",
+    44: "العتق",
+    45: "الهبة",
+    46: "الشهادات",
+    47: "الصلح",
+    48: "الشروط",
+    49: "الوصايا",
+    50: "الجهاد",
+    51: "الخمس",
+    52: "الديات",
+    53: "القسامة",
+    54: "المحاربين",
+    55: "الحيل",
+    56: "التعبير",
+    57: "الاعتصام",
+    58: "الأيمان",
+    59: "كفارة الأيمان",
+    60: "الفرائض",
+    61: "الحدود",
+    62: "الجنايات",
+    63: "أخبار الآحاد",
+    64: "المغازي",
+    65: "التفسير",
+    66: "فضائل القرآن",
+    67: "النكاح",
+    68: "الطلاق",
+    69: "النفقات",
+    70: "الأطعمة",
+    71: "العقيقة",
+    72: "الأشربة",
+    73: "المرضى",
+    74: "الطب",
+    75: "اللباس",
+    76: "الأدب",
+    77: "الاستئذان",
+    78: "الدعوات",
+    79: "التوبة",
+    80: "الرقاق",
+    81: "القدر",
+    82: "الفتن",
+    83: "الأحكام",
+    84: "التمني",
+    85: "أخبار الآحاد",
+    86: "الاعتصام",
+    87: "التوحيد",
+    88: "الفتن",
+    89: "الأحكام",
+    90: "التمني",
+    91: "أخبار الآحاد",
+    92: "الاعتصام",
+    93: "التوحيد",
+    94: "الفتن",
+    95: "الأحكام",
+    96: "التمني",
+    97: "التوحيد"
   }
   
   return arabicTitles[chapterId] || `الباب ${chapterId}`
@@ -369,17 +482,5 @@ function getFallbackChapters() {
     { id: 9, title: "Heures de prière", arabicTitle: "مواقيت الصلاة", hadithCount: 38 },
     { id: 10, title: "Appel à la prière", arabicTitle: "الأذان", hadithCount: 166 }
   ]
-}
-
-// Fonction pour précharger les données (optionnel)
-export async function preloadBukhariData() {
-  try {
-    await loadBukhariData()
-    console.log('🚀 Données Bukhari préchargées avec succès')
-    return true
-  } catch (error) {
-    console.error('❌ Erreur lors du préchargement:', error)
-    return false
-  }
 }
 

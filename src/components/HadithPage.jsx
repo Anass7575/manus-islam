@@ -8,18 +8,6 @@ import { Badge } from '@/components/ui/badge.jsx'
 import { Search, BookOpen, User, Hash, Loader2 } from 'lucide-react'
 import { getAllChapters, getChapterHadiths, searchHadiths } from '../services/hadithService.js'
 
-// Données des chapitres de Sahih al-Bukhari (extrait)
-const chapters = [
-  { id: 1, title: "Révélation", arabicTitle: "بدء الوحي", hadithCount: 7 },
-  { id: 2, title: "Foi", arabicTitle: "الإيمان", hadithCount: 53 },
-  { id: 3, title: "Connaissance", arabicTitle: "العلم", hadithCount: 76 },
-  { id: 4, title: "Ablutions", arabicTitle: "الوضوء", hadithCount: 113 },
-  { id: 5, title: "Bain rituel", arabicTitle: "الغسل", hadithCount: 31 },
-  { id: 6, title: "Menstruation", arabicTitle: "الحيض", hadithCount: 33 },
-  { id: 7, title: "Tayammum", arabicTitle: "التيمم", hadithCount: 23 },
-  { id: 8, title: "Prière", arabicTitle: "الصلاة", hadithCount: 172 },
-]
-
 // Composant pour afficher un chapitre
 function ChapterCard({ chapter, onSelect, isSelected }) {
   return (
@@ -127,7 +115,7 @@ function HadithPage() {
     const loadChapters = async () => {
       try {
         setChaptersLoading(true)
-        const chaptersData = getAllChapters()
+        const chaptersData = await getAllChapters()
         setChapters(chaptersData)
         setError(null)
       } catch (err) {
