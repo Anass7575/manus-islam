@@ -8,8 +8,8 @@ import { Badge } from '@/components/ui/badge.jsx'
 import { Search, BookOpen, User, Hash, Loader2 } from 'lucide-react'
 import { getAllChapters, getChapterHadiths, searchHadiths } from '../services/hadithService.js'
 
-// Données des chapitres de Sahih al-Bukhari (extrait)
-const chapters = [
+// Données des chapitres de Sahih al-Bukhari (extrait) - utilisé comme fallback
+const fallbackChapters = [
   { id: 1, title: "Révélation", arabicTitle: "بدء الوحي", hadithCount: 7 },
   { id: 2, title: "Foi", arabicTitle: "الإيمان", hadithCount: 53 },
   { id: 3, title: "Connaissance", arabicTitle: "العلم", hadithCount: 76 },
@@ -127,12 +127,14 @@ function HadithPage() {
     const loadChapters = async () => {
       try {
         setChaptersLoading(true)
-        const chaptersData = getAllChapters()
-        setChapters(chaptersData)
         setError(null)
+        const chaptersData = await getAllChapters()
+        setChapters(chaptersData)
       } catch (err) {
         console.error('Erreur lors du chargement des chapitres:', err)
-        setError('Erreur lors du chargement des chapitres')
+        setError('Erreur lors du chargement des chapitres. Utilisation des données de fallback.')
+        // Utiliser les données de fallback en cas d'erreur
+        setChapters(fallbackChapters)
       } finally {
         setChaptersLoading(false)
       }

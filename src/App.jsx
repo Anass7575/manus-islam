@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { BookOpen, Search, Globe, Moon, Sun, Menu } from 'lucide-react'
 import QuranPage from './components/QuranPage.jsx'
 import HadithPage from './components/HadithPage.jsx'
+import ChatBot from './components/ChatBot.jsx'
 import { LanguageProvider, useLanguage } from './contexts/LanguageContext.jsx'
 import './App.css'
 
@@ -273,6 +274,9 @@ function App() {
               <Route path="/hadith" element={<HadithPage />} />
             </Routes>
           </main>
+          
+          {/* Chatbot IA disponible sur toutes les pages */}
+          <ChatBot />
         </div>
       </Router>
     </LanguageProvider>
